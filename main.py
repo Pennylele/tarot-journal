@@ -1,6 +1,25 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from database import Base, engine, get_db
+import logging
+import models
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+logger = logging.getLogger("tarot_journal")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # This starts a database transaction.
+    async with engine.begin() as conn:
+        logger.info("--- Initializing Database Tables ---")
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    logger.info("--- Shutting Down Database Connection ---")
+    await engine.dispose()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/")
