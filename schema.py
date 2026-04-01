@@ -1,5 +1,31 @@
-from pydantic import BaseModel, ConfigDict, Field, EmailStr
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, BeforeValidator
 from datetime import datetime
+from enum import StrEnum
+from typing import Annotated
+
+
+class ArcanaType(StrEnum):
+    MAJOR = "major"
+    MINOR = "minor"
+
+
+class SuitType(StrEnum):
+    SWORDS = "swords"
+    CUPS = "cups"
+    WANDS = "wands"
+    PENTACLES = "pentacles"
+
+
+# Helper to make string inputs case-insensitive before matching Enums
+def to_lower(v: object) -> object:
+    if isinstance(v, str):
+        return v.lower()
+    return v
+
+
+# Annotated types that pre-process the input string to lowercase
+CaseInsensitiveArcana = Annotated[ArcanaType, BeforeValidator(to_lower)]
+CaseInsensitiveSuit = Annotated[SuitType, BeforeValidator(to_lower)]
 
 
 # For User input validation
@@ -33,10 +59,9 @@ class UserPrivate(UserPublic):
 # For Card input validation
 class CardBase(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    arcana: str = Field(min_length=1, max_length=20)
-    suit: str | None = Field(
-        default=None, min_length=1, max_length=100
-    )  # Cups, Swords, etc. (None for Major)
+    slug: str = Field(min_length=1, max_length=120)
+    arcana: CaseInsensitiveArcana | None = Field(default=None)
+    suit: CaseInsensitiveSuit | None = Field(default=None)
     meaning_upright: str = Field(min_length=1, max_length=1000)
     meaning_reversed: str = Field(min_length=1, max_length=1000)
     image_url: str | None = Field(default=None)
@@ -44,10 +69,8 @@ class CardBase(BaseModel):
 
 class CardUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
-    arcana: str | None = Field(default=None, max_length=20)
-    suit: str | None = Field(
-        default=None, min_length=1, max_length=100
-    )  # Cups, Swords, etc. (None for Major)
+    arcana: CaseInsensitiveArcana | None = Field(default=None)
+    suit: CaseInsensitiveSuit | None = Field(default=None)
     meaning_upright: str | None = Field(default=None, min_length=1, max_length=1000)
     meaning_reversed: str | None = Field(default=None, min_length=1, max_length=1000)
     image_url: str | None = Field(default=None, min_length=1, max_length=100)
