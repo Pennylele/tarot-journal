@@ -9,6 +9,7 @@ class Card(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(unique=True, index=True)
+    slug: Mapped[str] = mapped_column(unique=True, index=True)
     arcana: Mapped[str] = mapped_column()  # Major or Minor
     suit: Mapped[str | None] = mapped_column()  # Cups, Swords, etc. (None for Major)
     meaning_upright: Mapped[str] = mapped_column()
