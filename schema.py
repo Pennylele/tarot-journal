@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field, EmailStr, BeforeValidator
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
+from uuid import UUID
 
 
 class ArcanaType(StrEnum):
@@ -48,7 +49,7 @@ class UserPublic(BaseModel):
     # from_attributes=True allows Pydantic to read data from SQLAlchemy model objects
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     username: str
 
 
@@ -94,7 +95,7 @@ class EntryBase(BaseModel):
 
 
 class EntryCreate(EntryBase):
-    user_id: int
+    user_id: UUID
     card_id: int
 
 
@@ -107,7 +108,7 @@ class EntryUpdate(BaseModel):
 class EntryResponse(EntryBase):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    user_id: int
+    id: UUID
+    user_id: UUID
     card_id: int
     date_posted: datetime

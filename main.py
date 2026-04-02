@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from database import Base, engine, get_db
 import logging
 import models
-from routers import cards
+from routers import cards, entries
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger("tarot_journal")
@@ -23,6 +23,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(cards.router, prefix="/api/cards", tags=["cards"])
+app.include_router(entries.router, prefix="/api/entries", tags=["entries"])
 
 
 @app.get("/")

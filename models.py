@@ -1,5 +1,7 @@
+from uuid import uuid4, UUID
 from database import Base
 from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import UTC, datetime
 
@@ -20,7 +22,9 @@ class Card(Base):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(
+        SQL_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     entries: Mapped[list["Entry"]] = relationship(
@@ -32,10 +36,13 @@ class User(Base):
 class Entry(Base):
     __tablename__ = "entries"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(
+        SQL_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[UUID] = mapped_column(
+        SQL_UUID(as_uuid=True),
         ForeignKey("users.id"),
         nullable=False,
         index=True,
