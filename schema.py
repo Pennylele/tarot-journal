@@ -57,6 +57,11 @@ class UserPrivate(UserPublic):
     email: EmailStr
 
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
 # For Card input validation
 class CardBase(BaseModel):
     name: str = Field(min_length=1, max_length=100)
@@ -81,11 +86,6 @@ class CardUpdate(BaseModel):
 class CardResponse(CardBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
 
 
 # For Entry input validation

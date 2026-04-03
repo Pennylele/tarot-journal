@@ -1,15 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-import os
-from dotenv import load_dotenv
+from config import settings
 
-# This looks for the .env file and loads it into os.environ
-load_dotenv()
 
 # Use an environment variable, fallback to the dev string only if necessary
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-)
+SQLALCHEMY_DATABASE_URL = settings.database_url
 
 if SQLALCHEMY_DATABASE_URL is None:
     raise ValueError("DATABASE_URL is not set in the environment or .env file!")

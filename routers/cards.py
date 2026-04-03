@@ -10,22 +10,24 @@ from models import Card
 
 router = APIRouter()
 
+
 # GET /api/cards/
 # GET /api/cards/?arcana=Major
 # GET /api/cards/?arcana=Minor&suit=Swords
 @router.get("", response_model=list[CardResponse])
 async def list_cards(
     db: Annotated[AsyncSession, Depends(get_db)],
-    arcana: Optional[ArcanaType] = Query(None, description="Filter by Major or Minor"), 
-    suit: Optional[SuitType] = Query(None, description="Filter by suit"), 
-    ):
+    arcana: Optional[ArcanaType] = Query(None, description="Filter by Major or Minor"),
+    suit: Optional[SuitType] = Query(None, description="Filter by suit"),
+):
     """
     List a set of cards.
     """
+    query = select(Card)
     if arcana:
-        query = select(Card).where(func.lower(Card.arcana) == arcana)
+        query = query.where(func.lower(Card.arcana) == arcana.lower())
     if suit:
-        query = select(Card).where(func.lower(Card.suit) == suit)
+        query = query.where(func.lower(Card.suit) == suit.lower())
 
     result = await db.execute(query)
     return result.scalars().all()
@@ -40,15 +42,17 @@ async def get_card(db: Annotated[AsyncSession, Depends(get_db)], card_identifier
     if card_identifier.isdigit():
         query = select(Card).where(Card.id == int(card_identifier))
     else:
-        query = select(Card).where(Card.slug == card_identifier.lower().replace(" ", "-"))
-    
+        query = select(Card).where(
+            Card.slug == card_identifier.lower().replace(" ", "-")
+        )
+
     result = await db.execute(query)
     card = result.scalars().one_or_none()
 
     if card is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"Card with identifier '{card_identifier}' not found"
-            )
-    
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Card with identifier '{card_identifier}' not found",
+        )
+
     return card
