@@ -2,7 +2,7 @@ from uuid import uuid4, UUID
 from database import Base
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy import UUID as SQL_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from datetime import UTC, datetime
 
 
@@ -27,10 +27,20 @@ class User(Base):
     )
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    image_file: Mapped[str | None] = mapped_column(
+        String(200), nullable=True, default=None
+    )
     entries: Mapped[list["Entry"]] = relationship(
         back_populates="author", cascade="all, delete-orphan"
     )
-    # will add password and image_file later
+
+    # Store lowercase "email" value
+    @validates("email")
+    def lowercase_email(self, key, value):
+        if value is not None:
+            return value.strip().lower()
+        return value
 
 
 class Entry(Base):
