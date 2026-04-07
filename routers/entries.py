@@ -1,60 +1,72 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from schema import EntryResponse, EntryCreate, EntryUpdate, ArcanaType, SuitType
-from typing import Annotated, Optional
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, HTTPException, status
+from schema import EntryResponse, EntryCreate, EntryUpdate
+from typing import Annotated
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from models import Entry, User, Card
+from models import Entry, Card
 from database import get_db
-from models import Entry, User
 from uuid import UUID
+from auth import CurrentUser
 
 
 router = APIRouter()
 
 
-# Need to implement Authorization logic later. Right now the APIs are returning all values.
 @router.get("", response_model=list[EntryResponse])
-async def list_entries(db: Annotated[AsyncSession, Depends(get_db)]):
-    results = await db.execute(select(Entry).order_by(Entry.date_posted.desc()))
+async def list_entries(
+    db: Annotated[AsyncSession, Depends(get_db)], current_user: CurrentUser
+):
+    # Only return entries belonging to the current user
+    results = await db.execute(
+        select(Entry)
+        .where(Entry.user_id == current_user.id)
+        .order_by(Entry.date_posted.desc())
+    )
     entries = results.scalars().all()
     return entries
 
 
 @router.get("/{entry_id}", response_model=EntryResponse)
-async def get_entry(db: Annotated[AsyncSession, Depends(get_db)], entry_id: UUID):
+async def get_entry(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    entry_id: UUID,
+    current_user: CurrentUser,
+):
     results = await db.execute(select(Entry).where(Entry.id == entry_id))
     entry = results.scalars().one_or_none()
+
     if entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found"
         )
+
+    # Authorization check
+    if entry.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this entry",
+        )
+
     return entry
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=EntryResponse, status_code=status.HTTP_201_CREATED)
 async def create_entry(
-    db: Annotated[AsyncSession, Depends(get_db)], entry: EntryCreate
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    entry: EntryCreate,
 ):
-    # Verify User exists
-    user_result = await db.execute(select(User).where(User.id == entry.user_id))
-    user = user_result.scalars().one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-
-    # Verify Card exists
+    # Validate card exists
     card_result = await db.execute(select(Card).where(Card.id == entry.card_id))
-    card = card_result.scalars().one_or_none()
-    if card is None:
+    if card_result.scalars().one_or_none() is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Card not found"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid card ID"
         )
 
     new_entry = Entry(
         title=entry.title,
         content=entry.content,
-        user_id=entry.user_id,
+        user_id=current_user.id,
         card_id=entry.card_id,
     )
 
@@ -69,6 +81,7 @@ async def update_entry_full(
     db: Annotated[AsyncSession, Depends(get_db)],
     entry_data: EntryCreate,
     entry_id: UUID,
+    current_user: CurrentUser,
 ):
     result = await db.execute(select(Entry).where(Entry.id == entry_id))
     entry = result.scalars().one_or_none()
@@ -77,13 +90,11 @@ async def update_entry_full(
             status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found"
         )
 
-    if entry_data.user_id != entry.user_id:
-        result = await db.execute(select(User).where(User.id == entry_data.user_id))
-        user = result.scalars().one_or_none()
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-            )
+    if entry.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this post",
+        )
 
     if entry_data.card_id != entry.card_id:
         card_result = await db.execute(
@@ -97,7 +108,6 @@ async def update_entry_full(
 
     entry.title = entry_data.title
     entry.content = entry_data.content
-    entry.user_id = entry_data.user_id
     entry.card_id = entry_data.card_id
 
     await db.commit()
@@ -110,12 +120,19 @@ async def update_entry_partial(
     db: Annotated[AsyncSession, Depends(get_db)],
     entry_data: EntryUpdate,
     entry_id: UUID,
+    current_user: CurrentUser,
 ):
     result = await db.execute(select(Entry).where(Entry.id == entry_id))
     entry = result.scalars().one_or_none()
     if entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found"
+        )
+
+    if entry.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this entry",
         )
 
     update_data = entry_data.model_dump(exclude_unset=True)
@@ -128,12 +145,22 @@ async def update_entry_partial(
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_entry(db: Annotated[AsyncSession, Depends(get_db)], entry_id: UUID):
+async def delete_entry(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    entry_id: UUID,
+    current_user: CurrentUser,
+):
     result = await db.execute(select(Entry).where(Entry.id == entry_id))
     entry = result.scalars().one_or_none()
     if entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found"
+        )
+
+    if entry.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this entry",
         )
 
     await db.delete(entry)
