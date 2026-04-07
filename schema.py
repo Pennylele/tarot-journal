@@ -95,7 +95,6 @@ class EntryBase(BaseModel):
 
 
 class EntryCreate(EntryBase):
-    user_id: UUID
     card_id: int
 
 

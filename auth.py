@@ -3,6 +3,15 @@ import jwt
 from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
 from config import settings
+from typing import Annotated
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from models import User
+from config import settings
+from database import get_db
+from fastapi import Depends, HTTPException, status
+from uuid import UUID
+
 
 password_hash = PasswordHash.recommended()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/users/token")
@@ -49,3 +58,40 @@ def verify_access_token(token: str) -> str | None:
         return None
     else:
         return payload.get("sub")
+
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Get the currently authenticated user"""
+    user_id = verify_access_token(token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"www-Authenticate": "Bearer"},
+        )
+
+    # Validate user_id is a valid UUID (defense against malformed JWT)
+    try:
+        user_id_uuid = UUID(user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"www-Authenticate": "Bearer"},
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id_uuid))
+    user = result.scalars().one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+            headers={"www-Authenticate": "Bearer"},
+        )
+    return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]

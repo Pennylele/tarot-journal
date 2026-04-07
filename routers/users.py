@@ -1,5 +1,5 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from schema import UserPublic, UserPrivate, UserUpdate, UserCreate, Token, EntryResponse
 from typing import Annotated
@@ -7,13 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import User, Entry
-from auth import (
-    hash_password,
-    verify_password,
-    create_access_token,
-    verify_access_token,
-    oauth2_scheme,
-)
+from auth import CurrentUser, hash_password, verify_password, create_access_token
 from config import settings
 from datetime import timedelta
 
@@ -76,49 +70,14 @@ async def login_for_access_token(
 
 @router.get("/me", response_model=UserPrivate)
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
 ):
-    """Get the currently authenticated user"""
-    user_id = verify_access_token(token)
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"www-Authenticate": "Bearer"},
-        )
-
-    # Validate user_id is a valid UUID (defense against malformed JWT)
-    try:
-        user_id_uuid = UUID(user_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"www-Authenticate": "Bearer"},
-        )
-
-    result = await db.execute(select(User).where(User.id == user_id_uuid))
-    user = result.scalars().one_or_none()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-            headers={"www-Authenticate": "Bearer"},
-        )
-    return user
+    return current_user
 
 
 @router.get("/{user_id}", response_model=UserPublic)
-async def get_user(user_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
-    try:
-        user_id_uuid = UUID(user_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user id"
-        )
-
-    result = await db.execute(select(User).where(User.id == user_id_uuid))
+async def get_user(user_id: UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().one_or_none()
     if user is None:
         raise HTTPException(
@@ -129,14 +88,19 @@ async def get_user(user_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
 
 
 @router.get("/{user_id}/entries", response_model=list[EntryResponse])
-async def get_user_entries(user_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
-    try:
-        user_id_uuid = UUID(user_id)
-    except ValueError:
+async def get_user_entries(
+    user_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+):
+    # Ensure users can only query their own entry list via this endpoint
+    if user_id != current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user id"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view these entries",
         )
-    result = await db.execute(select(User).where(User.id == user_id_uuid))
+
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().one_or_none()
     if user is None:
         raise HTTPException(
@@ -154,33 +118,23 @@ async def get_user_entries(user_id: str, db: Annotated[AsyncSession, Depends(get
 
 @router.patch("/{user_id}", response_model=UserPrivate)
 async def update_user(
-    user_id: str, user_update: UserUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    user_id: UUID,
+    user_update: UserUpdate,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    try:
-        user_id_uuid = UUID(user_id)
-    except ValueError:
+    if user_id != current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user id"
-        )
-    result = await db.execute(select(User).where(User.id == user_id_uuid))
-    user = result.scalars().one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this user",
         )
 
-    # check if email has been registered
-    if user_update.email is not None and user_update.email != user.email:
-        result = await db.execute(
-            select(User).where(User.email == user_update.email.strip().lower())
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-        existing_email = result.scalars().one_or_none()
-        if existing_email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
 
     if user_update.username is not None and user_update.username != user.username:
         result = await db.execute(
@@ -193,6 +147,17 @@ async def update_user(
                 detail="Username already registered",
             )
 
+    if user_update.email is not None and user_update.email != user.email.lower():
+        result = await db.execute(
+            select(User).where(User.email == user_update.email.lower())
+        )
+        existing_email = result.scalars().one_or_none()
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+
     update_data = user_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(user, key, value)
@@ -203,14 +168,18 @@ async def update_user(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: str, db: Annotated[AsyncSession, Depends(get_db)]):
-    try:
-        user_id_uuid = UUID(user_id)
-    except ValueError:
+async def delete_user(
+    user_id: UUID,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if user_id != current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user id"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this user",
         )
-    result = await db.execute(select(User).where(User.id == user_id_uuid))
+
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().one_or_none()
     if user is None:
         raise HTTPException(
