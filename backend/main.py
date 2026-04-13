@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from routers import cards, entries
 from database import Base, engine
 import logging
-from routers import cards, entries, users
+from routers import users
 from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
@@ -22,7 +23,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/media", StaticFiles(directory="media"), name="media")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(cards.router, prefix="/api/cards", tags=["cards"])
 app.include_router(entries.router, prefix="/api/entries", tags=["entries"])
