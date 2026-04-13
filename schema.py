@@ -70,7 +70,7 @@ class CardBase(BaseModel):
     suit: CaseInsensitiveSuit | None = Field(default=None)
     meaning_upright: str = Field(min_length=1, max_length=1000)
     meaning_reversed: str = Field(min_length=1, max_length=1000)
-    image_url: str | None = Field(default=None)
+    image_file: str | None = Field(default=None)
 
 
 class CardUpdate(BaseModel):
@@ -79,7 +79,7 @@ class CardUpdate(BaseModel):
     suit: CaseInsensitiveSuit | None = Field(default=None)
     meaning_upright: str | None = Field(default=None, min_length=1, max_length=1000)
     meaning_reversed: str | None = Field(default=None, min_length=1, max_length=1000)
-    image_url: str | None = Field(default=None, min_length=1, max_length=100)
+    image_file: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 # For Card output validation

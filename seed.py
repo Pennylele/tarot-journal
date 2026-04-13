@@ -20,21 +20,30 @@ async def seed_data(reset: bool = False):
                 # Note: This clears rows but doesn't reset the ID sequence in all DBs.
                 # For a full reset, TRUNCATE is better but delete() is more cross-compatible.
 
-            # Check if cards already exist
-            result = await session.execute(select(func.count()).select_from(Card))
-            count = result.scalar()
-
-            if count is not None and count > 0:
-                print(f"Database already contains {count} cards. Skipping seed.")
-                return
+            # Fetch existing cards to determine what to update vs insert
+            result = await session.execute(select(Card))
+            existing_cards = {c.name: c for c in result.scalars().all()}
 
             for card_dict in cards_data:
                 # Generate slug from name: "The Fool" -> "the-fool"
                 card_dict["slug"] = card_dict["name"].lower().replace(" ", "-")
-                new_card = Card(**card_dict)
-                session.add(new_card)
 
-            print(f"Successfully seeded {len(cards_data)} cards into PostgreSQL!")
+                name = card_dict["name"]
+                if name in existing_cards:
+                    # Update existing card fields
+                    card = existing_cards[name]
+                    card.arcana = card_dict["arcana"]
+                    card.suit = card_dict["suit"]
+                    card.meaning_upright = card_dict["meaning_upright"]
+                    card.meaning_reversed = card_dict["meaning_reversed"]
+                    card.image_file = card_dict.get("image_file")
+                    card.slug = card_dict["slug"]
+                else:
+                    # Create new card record
+                    new_card = Card(**card_dict)
+                    session.add(new_card)
+
+            print(f"Successfully synced {len(cards_data)} cards to the database!")
 
     await engine.dispose()
 

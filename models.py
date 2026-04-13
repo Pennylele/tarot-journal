@@ -16,7 +16,13 @@ class Card(Base):
     suit: Mapped[str | None] = mapped_column()  # Cups, Swords, etc. (None for Major)
     meaning_upright: Mapped[str] = mapped_column()
     meaning_reversed: Mapped[str] = mapped_column()
-    image_url: Mapped[str | None] = mapped_column()
+    image_file: Mapped[str | None] = mapped_column()
+
+    @property
+    def image_path(self) -> str:
+        if self.image_file:
+            return f"/media/tarot_card/{self.image_file}"
+        return "/static/profile_pics/21-TheWorld.jpg"
 
 
 class User(Base):
