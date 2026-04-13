@@ -21,8 +21,8 @@ class Card(Base):
     @property
     def image_path(self) -> str:
         if self.image_file:
-            return f"/media/tarot_card/{self.image_file}"
-        return "/static/profile_pics/21-TheWorld.jpg"
+            return f"backend/static/tarot_card/{self.image_file}"
+        return "backend/static/tarot_card/21-TheWorld.jpg"
 
 
 class User(Base):

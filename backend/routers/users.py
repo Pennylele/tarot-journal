@@ -1,13 +1,25 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from schema import UserPublic, UserPrivate, UserUpdate, UserCreate, Token, EntryResponse
+from schema import (
+    UserPublic,
+    UserPrivate,
+    UserUpdate,
+    UserCreate,
+    Token,
+    EntryResponse,
+)
 from typing import Annotated
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import User, Entry
-from auth import CurrentUser, hash_password, verify_password, create_access_token
+from auth import (
+    CurrentUser,
+    hash_password,
+    verify_password,
+    create_access_token,
+)
 from config import settings
 from datetime import timedelta
 
