@@ -1,6 +1,8 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from google.oauth2 import id_token
+from google.auth.transport import requests
 from schema import (
     UserPublic,
     UserPrivate,
@@ -8,6 +10,7 @@ from schema import (
     UserCreate,
     Token,
     EntryResponse,
+    GoogleAuthRequest,
 )
 from typing import Annotated
 from sqlalchemy import select
@@ -22,8 +25,61 @@ from auth import (
 )
 from config import settings
 from datetime import timedelta
+import secrets
 
 router = APIRouter()
+
+
+@router.post("/auth/google", response_model=Token)
+async def google_auth(
+    auth_request: GoogleAuthRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        # Verify the Google ID Token
+        idinfo = id_token.verify_oauth2_token(
+            auth_request.token, requests.Request(), settings.google_client_id
+        )
+
+        # Token is valid. Get user info
+        email = idinfo["email"].lower()
+        google_id = idinfo["sub"]
+        name = idinfo.get("name", email.split("@")[0])
+
+        # Check if user exists
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalars().one_or_none()
+
+        if not user:
+            # Create new user if they don't exist
+            # Generate a random password since they use SSO
+            random_password = secrets.token_urlsafe(32)
+            user = User(
+                username=name,
+                email=email,
+                password_hash=hash_password(random_password),
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+        # Issue local JWT
+        access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+        access_token = create_access_token(
+            data={"sub": str(user.id)}, expires_delta=access_token_expires
+        )
+        return Token(access_token=access_token, token_type="bearer")
+
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google token",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Google authentication error: {str(e)}",
+        )
 
 
 @router.post("", response_model=UserPublic)

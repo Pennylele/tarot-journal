@@ -7,7 +7,6 @@ from sqlalchemy.orm import selectinload
 from database import get_db
 from models import Card
 
-
 router = APIRouter()
 
 
@@ -31,6 +30,22 @@ async def list_cards(
 
     result = await db.execute(query)
     return result.scalars().all()
+
+
+# Get a random card
+@router.get("/random", response_model=CardResponse)
+async def get_random_card(db: Annotated[AsyncSession, Depends(get_db)]):
+    query = select(Card).order_by(func.random()).limit(1)
+    result = await db.execute(query)
+    card = result.scalars().unique().one_or_none()
+
+    if card is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No cards found in the database",
+        )
+
+    return card
 
 
 # get a specific card - to check for its meanings I guess
