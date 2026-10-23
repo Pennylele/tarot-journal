@@ -115,3 +115,4 @@ class EntryResponse(EntryBase):
     user_id: UUID
     card_id: int
     date_posted: datetime
+    card: CardResponse | None = None

@@ -14,6 +14,7 @@ from schema import (
 )
 from typing import Annotated
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import User, Entry
@@ -177,7 +178,7 @@ async def get_user_entries(
         )
 
     result = await db.execute(
-        select(Entry).where(Entry.author == user).order_by(Entry.date_posted.desc())
+        select(Entry).where(Entry.author == user).options(selectinload(Entry.card)).order_by(Entry.date_posted.desc())
     )
 
     entries = result.scalars().all()

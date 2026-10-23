@@ -13,8 +13,12 @@ interface Card {
   image_file: string;
 }
 
-const TarotShuffle: React.FC = () => {
-  const { token, isAuthenticated, openLogin } = useAuth();
+interface TarotShuffleProps {
+  onViewEntries?: () => void;
+}
+
+const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
+  const { token, isAuthenticated, openLogin, logout } = useAuth();
   const [isShuffling, setIsShuffling] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [journalContent, setJournalContent] = useState('');
@@ -73,7 +77,15 @@ const TarotShuffle: React.FC = () => {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to save');
+      if (!response.ok) {
+        if (response.status === 401) {
+          logout();
+          openLogin();
+          setMessage('SESSION EXPIRED - PLEASE LOG IN AGAIN');
+          return;
+        }
+        throw new Error('Failed to save');
+      }
 
       setMessage('ENTRY RECORDED');
       setJournalContent('');
@@ -215,7 +227,28 @@ const TarotShuffle: React.FC = () => {
         </div>
       </div>
 
-      {message && <div className="brutal-status-toast">{message}</div>}
+      {message && (
+        <div className="brutal-status-toast">
+          <span>{message}</span>
+          {message === 'ENTRY RECORDED' && onViewEntries && (
+            <button
+              style={{
+                marginLeft: '1rem',
+                background: 'white',
+                color: 'black',
+                border: 'none',
+                padding: '0.35rem 0.75rem',
+                fontWeight: 900,
+                cursor: 'pointer',
+                borderRadius: '4px',
+              }}
+              onClick={onViewEntries}
+            >
+              VIEW IN JOURNAL &rarr;
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 };

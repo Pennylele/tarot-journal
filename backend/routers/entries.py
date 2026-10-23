@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from schema import EntryResponse, EntryCreate, EntryUpdate
 from typing import Annotated
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from models import Entry, Card
 from database import get_db
@@ -20,6 +21,7 @@ async def list_entries(
     results = await db.execute(
         select(Entry)
         .where(Entry.user_id == current_user.id)
+        .options(selectinload(Entry.card))
         .order_by(Entry.date_posted.desc())
     )
     entries = results.scalars().all()
@@ -32,7 +34,11 @@ async def get_entry(
     entry_id: UUID,
     current_user: CurrentUser,
 ):
-    results = await db.execute(select(Entry).where(Entry.id == entry_id))
+    results = await db.execute(
+        select(Entry)
+        .where(Entry.id == entry_id)
+        .options(selectinload(Entry.card))
+    )
     entry = results.scalars().one_or_none()
 
     if entry is None:
@@ -72,7 +78,7 @@ async def create_entry(
 
     db.add(new_entry)
     await db.commit()
-    await db.refresh(new_entry, attribute_names=["author"])
+    await db.refresh(new_entry, attribute_names=["author", "card"])
     return new_entry
 
 
@@ -111,7 +117,7 @@ async def update_entry_full(
     entry.card_id = entry_data.card_id
 
     await db.commit()
-    await db.refresh(entry, attribute_names=["author"])
+    await db.refresh(entry, attribute_names=["author", "card"])
     return entry
 
 
@@ -140,7 +146,7 @@ async def update_entry_partial(
         setattr(entry, key, value)
 
     await db.commit()
-    await db.refresh(entry, attribute_names=["author"])
+    await db.refresh(entry, attribute_names=["author", "card"])
     return entry
 
 

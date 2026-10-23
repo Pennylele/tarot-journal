@@ -32,6 +32,46 @@
   /* Minimalist spec */
 }
 
+/* Header Navigation */
+.header-nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.nav-btn {
+  background: white;
+  border: var(--border-thick);
+  border-radius: var(--rounded-pill);
+  padding: 0.5rem 1.25rem;
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 black;
+  transition: all 0.15s ease;
+}
+
+.nav-btn:hover:not(.active) {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 black;
+}
+
+.nav-btn.active {
+  background: #111111;
+  color: white;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.3);
+  transform: translate(-1px, -1px);
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    gap: 1.25rem;
+    align-items: flex-start;
+  }
+}
+
 .utility-icons {
   display: flex;
   gap: 1.5rem;
