@@ -5,6 +5,7 @@ from database import Base, engine
 import logging
 from routers import users
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger("tarot_journal")
@@ -16,6 +17,9 @@ async def lifespan(_app: FastAPI):
     async with engine.begin() as conn:
         logger.info("--- Initializing Database Tables ---")
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            text("ALTER TABLE entries ADD COLUMN IF NOT EXISTS is_reversed BOOLEAN DEFAULT FALSE NOT NULL;")
+        )
     yield
     logger.info("--- Shutting Down Database Connection ---")
     await engine.dispose()

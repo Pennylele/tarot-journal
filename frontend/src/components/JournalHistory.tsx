@@ -18,6 +18,7 @@ export interface JournalEntry {
   title: string;
   content: string;
   card_id: number;
+  is_reversed?: boolean;
   date_posted: string;
   card?: TarotCard | null;
 }
@@ -36,6 +37,13 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  // Inline editing state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const fetchEntries = async () => {
     if (!token) {
@@ -81,6 +89,25 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
     }
   }, [isAuthenticated, token]);
 
+  // 3.5-second automatic dismiss timer for toast notifications
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   const handleDelete = async (entryId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm('Delete this journal reading permanently?')) return;
@@ -105,10 +132,70 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
       }
 
       setEntries((prev) => prev.filter((item) => item.id !== entryId));
+      if (editingId === entryId) {
+        cancelEditing();
+      }
+      setToastMessage('READING DELETED');
     } catch (err: any) {
       alert(err.message || 'Error deleting entry');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const startEditing = (entry: JournalEntry, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(entry.id);
+    setEditTitle(entry.title);
+    setEditContent(entry.content);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditTitle('');
+    setEditContent('');
+  };
+
+  const handleUpdate = async (entryId: string) => {
+    if (!editTitle.trim() || !editContent.trim()) {
+      alert('Title and reflection cannot be empty.');
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+      const res = await fetch(`/api/entries/${entryId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          content: editContent.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          logout();
+          openLogin();
+          throw new Error('Your session expired. Please sign in again.');
+        }
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || `Failed to update entry (${res.status})`);
+      }
+
+      const updated: JournalEntry = await res.json();
+      setEntries((prev) =>
+        prev.map((item) => (item.id === entryId ? { ...item, ...updated } : item))
+      );
+      setEditingId(null);
+      setToastMessage('READING UPDATED');
+    } catch (err: any) {
+      alert(err.message || 'Error updating entry');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -233,7 +320,7 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
           <button
             onClick={fetchEntries}
             style={{
-              marginLeft: '1rem',
+              marginLeft: '0.5rem',
               background: 'white',
               color: 'black',
               border: 'none',
@@ -244,6 +331,26 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
             }}
           >
             RETRY
+          </button>
+          <button
+            className="toast-close-btn"
+            onClick={() => setError(null)}
+            title="Dismiss notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div className="brutal-status-toast">
+          <span>{toastMessage}</span>
+          <button
+            className="toast-close-btn"
+            onClick={() => setToastMessage(null)}
+            title="Dismiss notification"
+          >
+            ✕
           </button>
         </div>
       )}
@@ -265,22 +372,41 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
         /* Card Grid Layout */
         <div className="entries-grid">
           {filteredEntries.map((entry) => {
+            const isEditing = editingId === entry.id;
             const isExpanded = expandedIds.has(entry.id);
             const isLong = entry.content.length > 220;
 
             return (
-              <div key={entry.id} className="brutal-card entry-card">
-                {/* Header: Date + Delete */}
+              <div key={entry.id} className={`brutal-card entry-card ${isEditing ? 'is-editing' : ''}`}>
+                {/* Header: Date, Orientation + Actions */}
                 <div className="entry-card-header">
-                  <span className="date-badge">{formatDate(entry.date_posted)}</span>
-                  <button
-                    className="delete-entry-btn"
-                    title="Delete reading"
-                    disabled={deletingId === entry.id}
-                    onClick={(e) => handleDelete(entry.id, e)}
-                  >
-                    {deletingId === entry.id ? '...' : '✕'}
-                  </button>
+                  <div className="entry-card-badges">
+                    <span className="date-badge">{formatDate(entry.date_posted)}</span>
+                    <span className={`history-orientation-badge ${entry.is_reversed ? 'reversed' : 'upright'}`}>
+                      {entry.is_reversed ? 'REVERSED ↺' : 'UPRIGHT ⇡'}
+                    </span>
+                  </div>
+
+                  <div className="entry-card-actions">
+                    {!isEditing && (
+                      <button
+                        className="edit-entry-btn"
+                        title="Edit title & reflection"
+                        disabled={deletingId === entry.id || isUpdating}
+                        onClick={(e) => startEditing(entry, e)}
+                      >
+                        ✎
+                      </button>
+                    )}
+                    <button
+                      className="delete-entry-btn"
+                      title="Delete reading"
+                      disabled={deletingId === entry.id || isUpdating}
+                      onClick={(e) => handleDelete(entry.id, e)}
+                    >
+                      {deletingId === entry.id ? '...' : '✕'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Card Info & Thumbnail */}
@@ -290,7 +416,7 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
                       <img
                         src={`/static/tarot_cards/${entry.card.image_file}`}
                         alt={entry.card.name}
-                        className="entry-thumbnail"
+                        className={`entry-thumbnail ${entry.is_reversed ? 'is-reversed' : ''}`}
                       />
                     </div>
                   )}
@@ -300,28 +426,79 @@ const JournalHistory: React.FC<JournalHistoryProps> = ({ onDrawNew }) => {
                       {entry.card?.arcana ? `${entry.card.arcana} ARCANA` : 'TAROT'}
                       {entry.card?.suit ? ` • ${entry.card.suit}` : ''}
                     </div>
-                    <h3 className="entry-card-title">{entry.card?.name || entry.title}</h3>
-                    {entry.card?.meaning_upright && (
-                      <p className="entry-cosmic-hint">"{entry.card.meaning_upright}"</p>
+
+                    {isEditing ? (
+                      <div className="edit-field-group">
+                        <label className="edit-field-label">TITLE</label>
+                        <input
+                          type="text"
+                          className="edit-title-input"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          maxLength={100}
+                          disabled={isUpdating}
+                          placeholder="Reading title..."
+                        />
+                      </div>
+                    ) : (
+                      <h3 className="entry-card-title">{entry.title || entry.card?.name}</h3>
+                    )}
+
+                    {(entry.is_reversed ? entry.card?.meaning_reversed : entry.card?.meaning_upright) && (
+                      <p className="entry-cosmic-hint">
+                        "{entry.is_reversed ? entry.card?.meaning_reversed : entry.card?.meaning_upright}"
+                      </p>
                     )}
                   </div>
                 </div>
 
-                {/* Reflection Notes */}
-                <div className="entry-reflection-box">
-                  <div className="reflection-label">YOUR REFLECTION</div>
-                  <p className="reflection-text">
-                    {isLong && !isExpanded ? `${entry.content.slice(0, 220)}...` : entry.content}
-                  </p>
-                  {isLong && (
-                    <button
-                      className="expand-text-btn"
-                      onClick={() => toggleExpand(entry.id)}
-                    >
-                      {isExpanded ? 'Show Less ↑' : 'Read Full Note ↓'}
-                    </button>
-                  )}
-                </div>
+                {/* Reflection Notes or Inline Editor */}
+                {isEditing ? (
+                  <div className="entry-edit-box">
+                    <label className="edit-field-label">YOUR REFLECTION</label>
+                    <textarea
+                      className="edit-reflection-textarea"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      disabled={isUpdating}
+                      placeholder="Update your reflections..."
+                      rows={6}
+                    />
+                    <div className="edit-actions-bar">
+                      <button
+                        type="button"
+                        className="brutal-btn cancel-edit-btn"
+                        onClick={cancelEditing}
+                        disabled={isUpdating}
+                      >
+                        CANCEL
+                      </button>
+                      <button
+                        type="button"
+                        className="brutal-btn save-edit-btn"
+                        onClick={() => handleUpdate(entry.id)}
+                        disabled={isUpdating || !editTitle.trim() || !editContent.trim()}
+                      >
+                        {isUpdating ? 'SAVING...' : 'SAVE CHANGES'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="entry-reflection-box">
+                    <div className="reflection-label">YOUR REFLECTION</div>
+                    <p className="reflection-text">
+                      {isLong && !isExpanded ? `${entry.content.slice(0, 220)}...` : entry.content}
+                    </p>
+                    {isLong && (
+                      <button
+                        className="expand-text-btn"
+                        onClick={() => toggleExpand(entry.id)}
+                      >
+                        {isExpanded ? 'Show Less ↑' : 'Read Full Note ↓'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

@@ -1,6 +1,6 @@
 from uuid import uuid4, UUID
 from database import Base
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text, Boolean
 from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from datetime import UTC, datetime
@@ -69,6 +69,7 @@ class Entry(Base):
     )
 
     card_id: Mapped[int] = mapped_column(ForeignKey("cards.id"), nullable=False)
+    is_reversed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     author: Mapped[User] = relationship(back_populates="entries")
 

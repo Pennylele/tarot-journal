@@ -74,6 +74,7 @@ async def create_entry(
         content=entry.content,
         user_id=current_user.id,
         card_id=entry.card_id,
+        is_reversed=entry.is_reversed,
     )
 
     db.add(new_entry)
@@ -115,6 +116,7 @@ async def update_entry_full(
     entry.title = entry_data.title
     entry.content = entry_data.content
     entry.card_id = entry_data.card_id
+    entry.is_reversed = entry_data.is_reversed
 
     await db.commit()
     await db.refresh(entry, attribute_names=["author", "card"])

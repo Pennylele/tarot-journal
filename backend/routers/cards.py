@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, status
-from schema import CardResponse, CardUpdate, ArcanaType, SuitType
+import random
+from schema import CardResponse, CardUpdate, ArcanaType, SuitType, RandomCardResponse
 from typing import Annotated, Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,8 +34,11 @@ async def list_cards(
 
 
 # Get a random card
-@router.get("/random", response_model=CardResponse)
-async def get_random_card(db: Annotated[AsyncSession, Depends(get_db)]):
+@router.get("/random", response_model=RandomCardResponse)
+async def get_random_card(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    allow_reversed: bool = Query(True, description="Allow reversed cards (50% chance if true)"),
+):
     query = select(Card).order_by(func.random()).limit(1)
     result = await db.execute(query)
     card = result.scalars().unique().one_or_none()
@@ -42,10 +46,13 @@ async def get_random_card(db: Annotated[AsyncSession, Depends(get_db)]):
     if card is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No cards found in the database",
+            detail="No cards found in the database",
         )
 
-    return card
+    is_reversed = bool(random.choice([True, False])) if allow_reversed else False
+    card_data = CardResponse.model_validate(card).model_dump()
+    card_data["is_reversed"] = is_reversed
+    return RandomCardResponse(**card_data)
 
 
 # get a specific card - to check for its meanings I guess

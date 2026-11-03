@@ -92,10 +92,15 @@ class CardResponse(CardBase):
     id: int
 
 
+class RandomCardResponse(CardResponse):
+    is_reversed: bool = False
+
+
 # For Entry input validation
 class EntryBase(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     content: str = Field(min_length=1)
+    is_reversed: bool = False
 
 
 class EntryCreate(EntryBase):
@@ -105,6 +110,7 @@ class EntryCreate(EntryBase):
 class EntryUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=100)
     content: str | None = Field(default=None, min_length=1)
+    is_reversed: bool | None = None
 
 
 # For Entry output validation
@@ -114,5 +120,6 @@ class EntryResponse(EntryBase):
     id: UUID
     user_id: UUID
     card_id: int
+    is_reversed: bool = False
     date_posted: datetime
     card: CardResponse | None = None

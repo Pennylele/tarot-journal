@@ -16,28 +16,33 @@
 
 These items close the remaining functional gaps before the application is complete as a daily driver.
 
-### 1. Card Orientation (Upright vs. Reversed)
-* **Goal:** Reversals provide critical contrast in tarot readings (50% of practical tarot).
+### 1. Card Orientation (Upright vs. Reversed) - ✅ COMPLETED
+* **Goal:** Allow users to choose between pulling *all upright* cards or *both upright and reversed* (50% chance).
 * **Backend:**
-  * Update `/api/cards/random` to return an `is_reversed: bool` flag (50% probability).
-  * Update `Entry` model and `EntryResponse` to store and return `is_reversed: bool`.
+  * Updated `/api/cards/random` to accept `allow_reversed: bool` (default `True`) and return `is_reversed: bool`.
+  * Updated `Entry` model, `EntryBase`, `EntryCreate`, `EntryUpdate`, and `EntryResponse` to store and return `is_reversed: bool`.
+  * Auto-migration safe column check added on FastAPI lifespan startup.
 * **Frontend:**
+  * Added Neo-Brutalist Deck Orientation mode toggle (`UPRIGHT ONLY` vs `UPRIGHT & REVERSED`) with `localStorage` persistence.
   * In `TarotShuffle.tsx`, if reversed:
-    * Apply CSS `transform: rotate(180deg)` to the revealed card image.
-    * Display `selectedCard.meaning_reversed` instead of `meaning_upright`.
-    * Tag the insight as `COSMIC INSIGHT (REVERSED)`.
-  * Display reversed badge & rotated thumbnail in `JournalHistory.tsx`.
+    * Rotates revealed card image 180° with smooth transition.
+    * Displays `meaning_reversed` instead of `meaning_upright`.
+    * Shows `REVERSED ↺` orientation tag and customized AI reflection prompt.
+  * Display reversed badge & rotated thumbnail in `JournalHistory.tsx` with reversed cosmic hints.
 
-### 2. Edit Entry in UI
-* **Goal:** Enable users to edit their reflection text or title.
+### 2. Edit Entry in UI - ✅ COMPLETED
+* **Goal:** Enable users to edit their reflection text and title without affecting the historical integrity of the card drawn.
 * **Backend:**
-  * Already built at `update_entry_partial` (`PATCH /api/entries/{entry_id}`).
+  * Powered by `PATCH /api/entries/{entry_id}` supporting partial updates (`title`, `content`).
 * **Frontend:**
-  * Add an `Edit` action icon button to each card in `JournalHistory.tsx`.
-  * Inline editing mode or modal popup to update reflection notes without re-drawing.
+  * Added `✎` action icon button to each card in `JournalHistory.tsx`.
+  * Inline editor with brutalist title input, expandable reflection textarea, validation, and Save/Cancel controls.
+  * Instant local state update upon successful update with confirmation toast.
 
-### 3. Toast Notifications Polish
-* Add a 3.5-second automatic dismiss timer for toast notifications across the UI.
+### 3. Toast Notifications Polish - ✅ COMPLETED
+* Added active 3.5-second auto-dismiss lifecycle hooks (`useEffect` with timer cleanup) across [`TarotShuffle.tsx`](frontend/src/components/TarotShuffle.tsx) and [`JournalHistory.tsx`](frontend/src/components/JournalHistory.tsx).
+* Added global Neo-Brutalist toast utilities in [`index.css`](frontend/src/index.css) with slide-up animation and manual `✕` dismiss buttons.
+* Added automatic toasts for entry saves, updates, deletions, and error handling.
 
 ---
 

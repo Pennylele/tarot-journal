@@ -11,11 +11,14 @@ interface Card {
   meaning_upright: string;
   meaning_reversed: string;
   image_file: string;
+  is_reversed?: boolean;
 }
 
 interface TarotShuffleProps {
   onViewEntries?: () => void;
 }
+
+type OrientationMode = 'upright' | 'both';
 
 const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
   const { token, isAuthenticated, openLogin, logout } = useAuth();
@@ -26,12 +29,33 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
   const [message, setMessage] = useState('');
   const [pendingSave, setPendingSave] = useState(false);
 
+  // Preference for card pulling: upright only vs both upright & reversed
+  const [orientationMode, setOrientationMode] = useState<OrientationMode>(() => {
+    const saved = localStorage.getItem('tarot_orientation_mode');
+    return saved === 'upright' || saved === 'both' ? saved : 'both';
+  });
+
+  const handleOrientationChange = (mode: OrientationMode) => {
+    setOrientationMode(mode);
+    localStorage.setItem('tarot_orientation_mode', mode);
+  };
+
   useEffect(() => {
     if (isAuthenticated && pendingSave) {
       handleSave();
       setPendingSave(false);
     }
   }, [isAuthenticated, token, pendingSave]);
+
+  // 3.5-second automatic dismiss timer for toast notifications
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage('');
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   const handleShuffle = async () => {
     setIsShuffling(true);
@@ -40,9 +64,10 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
 
     setTimeout(async () => {
       try {
-        const response = await fetch('/api/cards/random');
+        const allowReversed = orientationMode === 'both';
+        const response = await fetch(`/api/cards/random?allow_reversed=${allowReversed}`);
         if (!response.ok) throw new Error('Failed to fetch card');
-        const card = await response.json();
+        const card: Card = await response.json();
         setSelectedCard(card);
       } catch (error) {
         console.error(error);
@@ -64,6 +89,7 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
 
     setIsSaving(true);
     try {
+      const orientationLabel = selectedCard.is_reversed ? 'Reversed' : 'Upright';
       const response = await fetch('/api/entries', {
         method: 'POST',
         headers: {
@@ -71,9 +97,10 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          title: `Reading: ${selectedCard.name}`,
+          title: `Reading: ${selectedCard.name} (${orientationLabel})`,
           content: journalContent,
           card_id: selectedCard.id,
+          is_reversed: Boolean(selectedCard.is_reversed),
         }),
       });
 
@@ -101,15 +128,38 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
       {/* Left Column: Interactive Arena */}
       <div className="arena-column">
         <div className="brutal-card arena-container">
-          {!selectedCard && !isShuffling && (
-            <div className="deck-base">
-              <button className="brutal-btn shuffle-trigger" onClick={handleShuffle}>
-                SHUFFLE DECK
+          {/* Deck Orientation Selector */}
+          <div className="deck-control-bar">
+            <span className="deck-control-label">DECK ORIENTATION:</span>
+            <div className="deck-mode-toggle">
+              <button
+                type="button"
+                className={`deck-mode-btn ${orientationMode === 'upright' ? 'active' : ''}`}
+                onClick={() => handleOrientationChange('upright')}
+                title="Only pull cards in upright position"
+              >
+                UPRIGHT ONLY
+              </button>
+              <button
+                type="button"
+                className={`deck-mode-btn ${orientationMode === 'both' ? 'active' : ''}`}
+                onClick={() => handleOrientationChange('both')}
+                title="Pull cards with potential reversals (50% chance)"
+              >
+                UPRIGHT & REVERSED
               </button>
             </div>
-          )}
+          </div>
 
           <div className={`deck-arena ${isShuffling ? 'is-shuffling' : ''}`}>
+            {!selectedCard && !isShuffling && (
+              <div className="deck-base">
+                <button className="brutal-btn shuffle-trigger" onClick={handleShuffle}>
+                  SHUFFLE DECK
+                </button>
+              </div>
+            )}
+
             {!selectedCard && (
               <>
                 <div className="hand-svg hand-left" style={{ width: '150px', height: '150px' }}>
@@ -186,12 +236,19 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
                   <img
                     src={`/static/tarot_cards/${selectedCard.image_file}`}
                     alt={selectedCard.name}
-                    className="revealed-card-img"
+                    className={`revealed-card-img ${selectedCard.is_reversed ? 'is-reversed' : ''}`}
                   />
                 </div>
                 <div className="ai-insight-block">
-                  <p className="insight-title">COSMIC INSIGHT: {selectedCard.name}</p>
-                  <p className="insight-text">{selectedCard.meaning_upright}</p>
+                  <div className="insight-header">
+                    <p className="insight-title">COSMIC INSIGHT: {selectedCard.name}</p>
+                    <span className={`orientation-tag ${selectedCard.is_reversed ? 'reversed' : 'upright'}`}>
+                      {selectedCard.is_reversed ? 'REVERSED ↺' : 'UPRIGHT ⇡'}
+                    </span>
+                  </div>
+                  <p className="insight-text">
+                    {selectedCard.is_reversed ? selectedCard.meaning_reversed : selectedCard.meaning_upright}
+                  </p>
                 </div>
                 <button className="brutal-btn draw-again-btn" onClick={() => setSelectedCard(null)}>
                   DRAW AGAIN
@@ -206,7 +263,11 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
       <div className="slate-column">
         <div className="brutal-card slate-container">
           <div className="ai-prompt-bubble">
-            <span>AI: WHAT DOES THIS CARD REVEAL ABOUT YOUR JOURNEY?</span>
+            <span>
+              {selectedCard?.is_reversed
+                ? 'AI: WHAT DOES THIS REVERSED SHADOW ENERGY REVEAL ABOUT YOUR LESSONS?'
+                : 'AI: WHAT DOES THIS CARD REVEAL ABOUT YOUR JOURNEY?'}
+            </span>
           </div>
           <textarea
             className="journal-textarea"
@@ -233,7 +294,7 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
           {message === 'ENTRY RECORDED' && onViewEntries && (
             <button
               style={{
-                marginLeft: '1rem',
+                marginLeft: '0.5rem',
                 background: 'white',
                 color: 'black',
                 border: 'none',
@@ -247,6 +308,13 @@ const TarotShuffle: React.FC<TarotShuffleProps> = ({ onViewEntries }) => {
               VIEW IN JOURNAL &rarr;
             </button>
           )}
+          <button
+            className="toast-close-btn"
+            onClick={() => setMessage('')}
+            title="Dismiss notification"
+          >
+            ✕
+          </button>
         </div>
       )}
     </>
